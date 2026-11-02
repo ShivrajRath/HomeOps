@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply min-h-screen bg-sand-50 font-sans text-ink antialiased;
+    background-image:
+      radial-gradient(1100px 520px at 100% -10%, rgba(134, 183, 160, 0.16), transparent 60%),
+      radial-gradient(900px 480px at -10% 15%, rgba(223, 153, 119, 0.09), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-pine-200 text-pine-900;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.5;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-sand-300;
+    border: 3px solid #faf8f3;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
