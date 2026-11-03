@@ -130,6 +130,14 @@ const TEMPLATES = [
     description: 'Confirm the gauge is in the green and the pin is intact. Replace expired units.',
   },
   {
+    title: 'Refresh the home inventory',
+    category: 'maintenance',
+    frequency: 'annual',
+    dueInDays: 180,
+    description:
+      'Walk through each room and confirm the inventory is current: new purchases, serial numbers, values, and receipts. A few minutes now saves a painful claims process later.',
+  },
+  {
     title: 'Inspect the roof and attic',
     category: 'maintenance',
     frequency: 'annual',

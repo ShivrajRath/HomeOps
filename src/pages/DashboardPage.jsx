@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   FileText,
+  Boxes,
   FolderLock,
   LayoutGrid,
   MapPin,
@@ -31,6 +32,7 @@ import {
   todayYMD,
 } from '../lib/date';
 import { completeTask, db, getPrimaryProperty } from '../lib/db';
+import { documentedValue, formatCurrency } from '../lib/inventory';
 import { downloadCalendar } from '../lib/ics';
 import { frequencyLabel } from '../lib/recurrence';
 import { cx } from '../lib/utils';
@@ -68,6 +70,7 @@ export default function DashboardPage() {
   const documents =
     useLiveQuery(() => db.documents.orderBy('uploadedAt').reverse().toArray(), []) ?? [];
   const rooms = useLiveQuery(() => db.rooms.toArray(), []) ?? [];
+  const items = useLiveQuery(() => db.items.toArray(), []) ?? [];
 
   const pushToast = useUiStore((state) => state.pushToast);
   const navigate = useNavigate();
@@ -90,6 +93,8 @@ export default function DashboardPage() {
     .slice(0, 4);
 
   const season = SEASONAL_TIPS[seasonForMonth(new Date().getMonth())];
+  const inventoryCount = items.filter((item) => item.status === 'owned').length;
+  const inventoryValue = documentedValue(items);
 
   const handleComplete = async (task) => {
     setBusyId(task.id);
@@ -142,7 +147,7 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="mt-7 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div className="mt-7 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-5">
         <StatCard
           to="/tasks"
           label="Overdue"
@@ -158,6 +163,14 @@ export default function DashboardPage() {
           hint="On the near horizon"
           icon={CalendarDays}
           tone="pine"
+        />
+        <StatCard
+          to="/inventory"
+          label="Inventory"
+          value={inventoryCount}
+          hint={inventoryValue ? `${formatCurrency(inventoryValue)} documented` : 'Items and values'}
+          icon={Boxes}
+          tone="sand"
         />
         <StatCard
           to="/documents"

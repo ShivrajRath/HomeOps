@@ -6,6 +6,7 @@ import Toaster from './components/Toaster';
 import AuthPage from './pages/AuthPage';
 import DashboardPage from './pages/DashboardPage';
 import DocumentsPage from './pages/DocumentsPage';
+import InventoryPage from './pages/InventoryPage';
 import PropertyWizardPage from './pages/PropertyWizardPage';
 import RoomsPage from './pages/RoomsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -32,6 +33,7 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="tasks" element={<TasksPage />} />
+              <Route path="inventory" element={<InventoryPage />} />
               <Route path="documents" element={<DocumentsPage />} />
               <Route path="rooms" element={<RoomsPage />} />
               <Route path="settings" element={<SettingsPage />} />

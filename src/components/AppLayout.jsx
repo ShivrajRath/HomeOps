@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
+  Boxes,
   FolderLock,
   LayoutDashboard,
   LayoutGrid,
@@ -20,6 +21,7 @@ import { useAuthStore } from '../store/useAuthStore';
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: LayoutDashboard, end: true },
   { to: '/tasks', label: 'Task plan', shortLabel: 'Tasks', icon: ListChecks },
+  { to: '/inventory', label: 'Inventory', shortLabel: 'Items', icon: Boxes },
   { to: '/documents', label: 'Document vault', shortLabel: 'Vault', icon: FolderLock },
   { to: '/rooms', label: 'Spaces', shortLabel: 'Spaces', icon: LayoutGrid },
   { to: '/settings', label: 'Settings', shortLabel: 'Settings', icon: Settings },
@@ -169,7 +171,7 @@ export default function AppLayout() {
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-sand-200 bg-white/95 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-md grid-cols-5">
+        <div className="mx-auto grid max-w-md grid-cols-6">
           {NAV_ITEMS.map((item) => (
             <NavItem key={item.to} item={item} overdueCount={overdueCount} mobile />
           ))}

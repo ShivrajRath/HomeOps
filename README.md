@@ -12,6 +12,7 @@ A local-first home organization and maintenance planner. The database is your br
 - **Task plan** — Overdue / This week / Upcoming board, recurring completion, pause/resume, manual tasks, and one-click `.ics` export with `RRULE`s for Google Calendar or Outlook.
 - **Document vault** — receipts, invoices, insurance policies, and warranties uploaded to `HomeOps / Documents` in Google Drive, with categories, search, preview, download, and deletion.
 - **Spaces** — room photos and floor plans in `HomeOps / Spaces`, tagged as either type.
+- **Home inventory** — a room-by-room catalogue of belongings with the details insurers ask for: brand, model, serial number, purchase date, price paid, replacement value, condition, warranty date, notes, and a photo. A starter catalogue of common household items fills in the category, room, and a typical replacement value so a first inventory takes taps instead of typing. Items can be marked sold, donated, discarded, or lost, and the full list exports to a spreadsheet-ready CSV.
 - **Google Drive sync** — a debounced JSON backup (`basekeep_backup.json`) in the hidden `appDataFolder`, restored on sign-in.
 - **Settings** — profile facts, "add missing starter tasks", Drive status, manual sync, and sign-out.
 
@@ -100,9 +101,14 @@ db.version(1).stores({
   tasks: '++id, propertyId, title, category, frequency, nextDueDate, status',
   documents: '++id, propertyId, title, category, driveFileId, uploadedAt',
 });
+
+db.version(2).stores({
+  // …the four tables above, unchanged…
+  items: '++id, propertyId, name, category, room, warrantyUntil, status, createdAt',
+});
 ```
 
-Records use camelCase (`propertyId`, `nextDueDate`, `driveFileId`, `uploadedAt`). A few non-indexed fields keep the existing screens intact: property systems (`hvacType`, `waterHeaterType`, `heatingFuel`, `hasGutters`), task `description` and `lastCompletedAt`, room `kind` and file metadata, and document `fileName`, `fileSize`, and `mimeType`.
+Version 2 adds the inventory table; existing browsers upgrade in place. Records use camelCase (`propertyId`, `nextDueDate`, `driveFileId`, `uploadedAt`). A few non-indexed fields keep the existing screens intact: property systems (`hvacType`, `waterHeaterType`, `heatingFuel`, `hasGutters`), task `description` and `lastCompletedAt`, room `kind` and file metadata, document `fileName`, `fileSize`, and `mimeType`, and inventory `brand`, `model`, `serialNumber`, `quantity`, `condition`, `purchaseDate`, `purchasePrice`, `replacementValue`, `notes`, `removedAt`, and photo metadata.
 
 One home per account is still the MVP shape: the app reads the oldest property record and ignores additional ones.
 
@@ -113,6 +119,7 @@ One home per account is still the MVP shape: the app reads the oldest property r
 | JSON backup | `appDataFolder/basekeep_backup.json` (hidden, created by HomeOps) |
 | Vault files | `My Drive/HomeOps/Documents/` |
 | Room photos, floor plans | `My Drive/HomeOps/Spaces/` |
+| Inventory item photos | `My Drive/HomeOps/Inventory/` |
 
 The `drive.appdata` scope covers the hidden backup; `drive.file` covers the visible files HomeOps creates. The app cannot browse the rest of your Drive.
 
@@ -125,7 +132,7 @@ The `drive.appdata` scope covers the hidden backup; `drive.file` covers the visi
 - **Conflicts:** last writer wins. There is no multi-device merge; avoid editing the same home on two devices at once.
 - **Token expiry:** Google access tokens last about an hour. When one expires, local editing still works, the sidebar shows **Sync paused**, and **Sync now** or a fresh sign-in reconnects.
 
-The backup payload includes `app`, `schemaVersion`, `exportedAt`, and `data` (properties, rooms, tasks, documents). Hydration keeps explicit IDs so records remain stable across devices and Dexie advances its auto-increment counters.
+The backup payload includes `app`, `schemaVersion`, `exportedAt`, and `data` (properties, rooms, tasks, documents, items). Hydration keeps explicit IDs so records remain stable across devices and Dexie advances its auto-increment counters.
 
 ## Security and privacy
 
@@ -178,6 +185,7 @@ Manual deploy: `VITE_GOOGLE_CLIENT_ID=... npm run build` and publish `dist`.
     │   ├── date.js
     │   ├── db.js                    # Dexie init, CRUD, backup serialize/hydrate
     │   ├── ics.js
+    │   ├── inventory.js             # categories, starter catalogue, value + CSV helpers
     │   ├── recurrence.js
     │   ├── syncService.js           # Google auth, Drive JSON sync, uploads
     │   ├── syncStatus.js            # observable sync state
@@ -187,6 +195,7 @@ Manual deploy: `VITE_GOOGLE_CLIENT_ID=... npm run build` and publish `dist`.
     │   ├── AuthPage.jsx             # Sign in with Google
     │   ├── DashboardPage.jsx
     │   ├── DocumentsPage.jsx
+    │   ├── InventoryPage.jsx
     │   ├── PropertyWizardPage.jsx
     │   ├── RoomsPage.jsx
     │   ├── SettingsPage.jsx
@@ -212,7 +221,9 @@ There is no automated test suite in this MVP. After a build, exercise:
 5. Upload a document → it appears in `HomeOps/Documents`; preview and download work; delete moves it to Drive trash.
 6. Upload a room photo and a floor plan → images render through the Drive API.
 7. Reload → session and data return without re-consent while the token is valid.
-8. Sign out → local data remains; signing in with another Google account switches to that account's backup.
+8. Add inventory items from the catalogue → they group by room, totals match quantity × replacement value, and a photo lands in `HomeOps/Inventory`.
+9. Mark an item sold → it leaves the documented total but stays visible under **Show removed**; export the CSV and confirm every field is present.
+10. Sign out → local data remains; signing in with another Google account switches to that account's backup.
 
 ### Limitations
 

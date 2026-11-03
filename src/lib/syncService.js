@@ -850,7 +850,7 @@ export async function trashDriveFile(fileId) {
  * scheduleSync() only starts a debounced timer; it never performs database
  * work inside the write transaction.
  */
-for (const tableName of ['properties', 'rooms', 'tasks', 'documents']) {
+for (const tableName of ['properties', 'rooms', 'tasks', 'documents', 'items']) {
   const table = db.table(tableName);
   for (const eventName of ['creating', 'updating', 'deleting']) {
     table.hook(eventName, () => {

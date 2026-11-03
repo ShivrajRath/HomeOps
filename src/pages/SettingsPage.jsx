@@ -24,6 +24,7 @@ import {
 } from '../lib/constants';
 import { formatDateTime, relativeTime } from '../lib/date';
 import { db, getPrimaryProperty, seedMissingTasks } from '../lib/db';
+import { documentedValue, formatCurrency } from '../lib/inventory';
 import { syncNow } from '../lib/syncService';
 import { useSyncState } from '../lib/syncStatus';
 import { formatBytes } from '../lib/utils';
@@ -56,6 +57,7 @@ export default function SettingsPage() {
   const tasks = useLiveQuery(() => db.tasks.toArray(), []) ?? [];
   const documents = useLiveQuery(() => db.documents.toArray(), []) ?? [];
   const rooms = useLiveQuery(() => db.rooms.toArray(), []) ?? [];
+  const items = useLiveQuery(() => db.items.toArray(), []) ?? [];
 
   const session = useAuthStore((state) => state.session);
   const signOut = useAuthStore((state) => state.signOut);
@@ -148,6 +150,11 @@ export default function SettingsPage() {
             <Fact label="Gutters" value={property?.hasGutters ? 'Yes' : 'No'} />
             <Fact label="Documents" value={documents.length} />
             <Fact label="Spaces" value={rooms.length} />
+            <Fact
+              label="Inventory items"
+              value={items.filter((item) => item.status === 'owned').length}
+            />
+            <Fact label="Documented value" value={formatCurrency(documentedValue(items))} />
           </dl>
         </Card>
 
@@ -258,10 +265,12 @@ export default function SettingsPage() {
 
           <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-ink-soft">
             <HardDrive size={14} className="mt-0.5 shrink-0 text-pine-600" />
-            Documents upload to <span className="font-medium text-ink-muted">HomeOps / Documents</span>
+            Documents upload to{' '}
+            <span className="font-medium text-ink-muted">HomeOps / Documents</span>
             ; room photos and floor plans go to{' '}
-            <span className="font-medium text-ink-muted">HomeOps / Spaces</span>. Deleting a record
-            moves the Drive file to trash, not into permanent deletion.
+            <span className="font-medium text-ink-muted">HomeOps / Spaces</span>. Inventory photos go
+            to <span className="font-medium text-ink-muted">HomeOps / Inventory</span>. Deleting a
+            record moves the Drive file to trash, not into permanent deletion.
           </p>
         </Card>
 

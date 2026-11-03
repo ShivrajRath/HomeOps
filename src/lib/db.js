@@ -9,7 +9,7 @@ import { buildSeedTasks } from './taskTemplates';
  *
  * Every screen reads from Dexie through useLiveQuery, so a write is visible
  * immediately and works offline. Google Drive receives a JSON backup of these
- * four tables whenever a change settles.
+ * five tables whenever a change settles.
  */
 export const db = new Dexie(DB_NAME);
 
@@ -18,6 +18,16 @@ db.version(1).stores({
   rooms: '++id, propertyId, name, driveFileId',
   tasks: '++id, propertyId, title, category, frequency, nextDueDate, status',
   documents: '++id, propertyId, title, category, driveFileId, uploadedAt',
+});
+
+// Version 2 adds the home inventory. The earlier version stays declared so
+// browsers that already hold data upgrade in place rather than starting over.
+db.version(2).stores({
+  properties: '++id, address, yearBuilt, sqft, createdAt',
+  rooms: '++id, propertyId, name, driveFileId',
+  tasks: '++id, propertyId, title, category, frequency, nextDueDate, status',
+  documents: '++id, propertyId, title, category, driveFileId, uploadedAt',
+  items: '++id, propertyId, name, category, room, warrantyUntil, status, createdAt',
 });
 
 const nowISO = () => new Date().toISOString();
@@ -220,6 +230,96 @@ export async function deleteDocumentRecord(id) {
   await db.documents.delete(id);
 }
 
+/* -------------------------------------------------------------- Inventory */
+
+const ITEM_CONDITIONS = ['excellent', 'good', 'fair', 'poor'];
+const ITEM_STATUSES = ['owned', 'sold', 'donated', 'discarded', 'lost'];
+
+function quantityOrOne(value) {
+  const number = Math.trunc(Number(value));
+  return Number.isFinite(number) && number > 0 ? Math.min(number, 999) : 1;
+}
+
+function moneyOrNull(value) {
+  const number = numberOrNull(value);
+  return number != null && number >= 0 ? number : null;
+}
+
+function dateOrNull(value) {
+  const text = cleanText(value).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+/** Clean an inventory form into the shape stored in Dexie. */
+export function normalizeItem(values = {}) {
+  const name = cleanText(values.name);
+  if (!name) throw new Error('Give the item a name you will recognize later.');
+
+  const status = ITEM_STATUSES.includes(values.status) ? values.status : 'owned';
+
+  return {
+    name,
+    category: values.category || 'other',
+    room: cleanText(values.room) || 'Whole home',
+    quantity: quantityOrOne(values.quantity),
+    brand: cleanText(values.brand) || null,
+    model: cleanText(values.model) || null,
+    serialNumber: cleanText(values.serialNumber) || null,
+    condition: ITEM_CONDITIONS.includes(values.condition) ? values.condition : 'good',
+    purchaseDate: dateOrNull(values.purchaseDate),
+    purchasePrice: moneyOrNull(values.purchasePrice),
+    replacementValue: moneyOrNull(values.replacementValue),
+    warrantyUntil: dateOrNull(values.warrantyUntil),
+    notes: cleanText(values.notes) || null,
+    status,
+    removedAt: status === 'owned' ? null : dateOrNull(values.removedAt) || todayYMD(),
+    driveFileId: values.driveFileId || null,
+    fileName: values.fileName || null,
+    fileSize: Number(values.fileSize) > 0 ? Number(values.fileSize) : null,
+    mimeType: values.mimeType || null,
+  };
+}
+
+export async function addItem(propertyId, values = {}) {
+  if (!propertyId) throw new Error('Create your property profile first.');
+
+  const payload = normalizeItem(values);
+  const timestamp = nowISO();
+  const item = { propertyId, ...payload, createdAt: timestamp, updatedAt: timestamp };
+  const id = await db.items.add(item);
+  return { id, ...item };
+}
+
+/** Bulk-create starter catalogue picks in one write (and one sync burst). */
+export async function addItems(propertyId, list = []) {
+  if (!propertyId) throw new Error('Create your property profile first.');
+
+  const timestamp = nowISO();
+  const payload = list
+    .filter(Boolean)
+    .map((values) => normalizeItem(values))
+    .map((item) => ({ propertyId, ...item, createdAt: timestamp, updatedAt: timestamp }));
+
+  if (payload.length === 0) return 0;
+  await db.items.bulkAdd(payload);
+  return payload.length;
+}
+
+export async function updateItem(id, patch = {}) {
+  const current = await db.items.get(id);
+  if (!current) throw new Error('That item is no longer in your inventory.');
+
+  // Merging before normalizing keeps untouched fields intact while still
+  // stamping removedAt when an item is sold, donated, or discarded.
+  const next = normalizeItem({ ...current, ...patch });
+  await db.items.update(id, { ...next, updatedAt: nowISO() });
+  return db.items.get(id);
+}
+
+export async function deleteItem(id) {
+  await db.items.delete(id);
+}
+
 /* ------------------------------------------------------------ Sync payload */
 
 /**
@@ -227,18 +327,19 @@ export async function deleteDocumentRecord(id) {
  * basekeep_backup.json in Google Drive's hidden app data folder.
  */
 export async function exportDatabase() {
-  const [properties, rooms, tasks, documents] = await Promise.all([
+  const [properties, rooms, tasks, documents, items] = await Promise.all([
     db.properties.orderBy('id').toArray(),
     db.rooms.orderBy('id').toArray(),
     db.tasks.orderBy('id').toArray(),
     db.documents.orderBy('id').toArray(),
+    db.items.orderBy('id').toArray(),
   ]);
 
   return {
     app: 'HomeOps',
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: nowISO(),
-    data: { properties, rooms, tasks, documents },
+    data: { properties, rooms, tasks, documents, items },
   };
 }
 
@@ -262,30 +363,51 @@ export async function hydrateDatabase(snapshot) {
     rooms: rows(source.rooms),
     tasks: rows(source.tasks),
     documents: rows(source.documents),
+    // Backups written before the inventory existed simply have no items.
+    items: rows(source.items),
   };
 
-  await db.transaction('rw', db.properties, db.rooms, db.tasks, db.documents, async () => {
-    await db.documents.clear();
-    await db.tasks.clear();
-    await db.rooms.clear();
-    await db.properties.clear();
+  await db.transaction(
+    'rw',
+    db.properties,
+    db.rooms,
+    db.tasks,
+    db.documents,
+    db.items,
+    async () => {
+      await db.items.clear();
+      await db.documents.clear();
+      await db.tasks.clear();
+      await db.rooms.clear();
+      await db.properties.clear();
 
-    if (next.properties.length) await db.properties.bulkPut(next.properties);
-    if (next.rooms.length) await db.rooms.bulkPut(next.rooms);
-    if (next.tasks.length) await db.tasks.bulkPut(next.tasks);
-    if (next.documents.length) await db.documents.bulkPut(next.documents);
-  });
+      if (next.properties.length) await db.properties.bulkPut(next.properties);
+      if (next.rooms.length) await db.rooms.bulkPut(next.rooms);
+      if (next.tasks.length) await db.tasks.bulkPut(next.tasks);
+      if (next.documents.length) await db.documents.bulkPut(next.documents);
+      if (next.items.length) await db.items.bulkPut(next.items);
+    },
+  );
 
   return next;
 }
 
 export async function clearDatabase() {
-  await db.transaction('rw', db.properties, db.rooms, db.tasks, db.documents, async () => {
-    await db.documents.clear();
-    await db.tasks.clear();
-    await db.rooms.clear();
-    await db.properties.clear();
-  });
+  await db.transaction(
+    'rw',
+    db.properties,
+    db.rooms,
+    db.tasks,
+    db.documents,
+    db.items,
+    async () => {
+      await db.items.clear();
+      await db.documents.clear();
+      await db.tasks.clear();
+      await db.rooms.clear();
+      await db.properties.clear();
+    },
+  );
 }
 
 export async function isDatabaseEmpty() {
